@@ -1,0 +1,27 @@
+[package]
+name = "binst-decoder"
+version = "0.1.0"
+edition = "2024"
+description = "Map Citrea DA state diffs to BINST protocol entities (institutions, processes, steps)"
+
+[features]
+default = ["std"]
+std = ["miniscript/std"]
+wasm = ["dep:wasm-bindgen", "dep:serde_json"]
+
+[dependencies]
+citrea-decoder = { path = "../citrea-decoder" }
+hex = "0.4"
+miniscript = { version = "13", default-features = false, features = ["compiler"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", optional = true }
+sha2 = "0.10"
+thiserror = "2"
+tiny-keccak = { version = "2", features = ["keccak"] }
+wasm-bindgen = { version = "0.2", optional = true }
+
+[dev-dependencies]
+borsh = { version = "1", features = ["derive"] }
+brotli = "7"
+hex = "0.4"
+hex-literal = "0.4"

@@ -1,0 +1,46 @@
+{
+  "v": 0,
+  "type": "state_digest",
+  "institution": "9fc9870038becdae3b9a654ccdfcea9b90108cd098c06098fd34f5af55247511i0",
+  "l2_block_range": {
+    "from": 23971029,
+    "to": 23972028
+  },
+  "summary": {
+    "instances_created": 1,
+    "instances_completed": 1,
+    "steps_executed": 4,
+    "members_added": 0,
+    "members_removed": 0
+  },
+  "state_root": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+  "da_anchors": [
+    {
+      "btc_block": 127747,
+      "btc_txid": "ce8a015b670a47ade22cacba193cfbf5fba535752fb3c2c738bd2f7bcfc468c2",
+      "seq_index": 16697,
+      "l2_end_block": 23972028
+    }
+  ],
+  "contracts": [
+    {
+      "address": "0x8CF6fe5cd0905b6bFb81643b0DCda64Af32fd762",
+      "role": "institution",
+      "name": "BINST Pilot Institution"
+    },
+    {
+      "address": "0x3A6A07C5D2C420331f68DD407AaFff92f3275a86",
+      "role": "template",
+      "name": "Pilot Process"
+    },
+    {
+      "address": "0x2066B17e0e6bD9AB1bbC76A146f68eBfca7C6f4f",
+      "role": "instance"
+    },
+    {
+      "address": "0x46c505d38e9009a16398f268e26dff6844ef59d5",
+      "role": "deployer"
+    }
+  ],
+  "prev_digest": null
+}

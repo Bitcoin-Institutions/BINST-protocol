@@ -1,0 +1,8 @@
+{
+  "v": 0,
+  "type": "institution",
+  "name": "Acme Financial",
+  "admin": "a3f4b2c1d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2",
+  "description": "Pilot institution for BINST protocol testing on testnet4.",
+  "citrea_contract": "0x1234567890abcdef1234567890abcdef12345678"
+}

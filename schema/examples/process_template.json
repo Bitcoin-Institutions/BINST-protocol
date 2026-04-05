@@ -1,0 +1,12 @@
+{
+  "v": 0,
+  "type": "process_template",
+  "name": "KYC Onboarding",
+  "description": "Know Your Customer verification workflow.",
+  "citrea_contract": "0xabcdef1234567890abcdef1234567890abcdef12",
+  "steps": [
+    { "name": "ID Upload", "action_type": "upload" },
+    { "name": "Identity Verification", "action_type": "verification" },
+    { "name": "Final Approval", "action_type": "approval" }
+  ]
+}

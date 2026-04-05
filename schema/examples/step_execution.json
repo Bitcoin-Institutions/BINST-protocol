@@ -1,0 +1,8 @@
+{
+  "v": 0,
+  "type": "step_execution",
+  "step_index": 0,
+  "status": "completed",
+  "actor": "b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2",
+  "data_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

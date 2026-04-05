@@ -1,0 +1,18 @@
+[package]
+name = "citrea-decoder"
+version = "0.1.0"
+edition = "2024"
+description = "Decode Citrea DA inscriptions from Bitcoin taproot witness data"
+
+[features]
+default = ["std"]
+std = ["borsh/std", "bitcoin/std"]
+
+[dependencies]
+borsh = { version = "1", default-features = false, features = ["derive"] }
+brotli = "7"
+bitcoin = { version = "0.32", default-features = false }
+thiserror = "2"
+
+[dev-dependencies]
+hex = "0.4"
