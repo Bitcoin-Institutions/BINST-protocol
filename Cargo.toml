@@ -3,6 +3,8 @@ resolver = "2"
 members = [
     "crates/binst-inscription",
     "crates/binst-decoder",
+    "crates/binst-evm",
+    "crates/binst-btc",
     "crates/citrea-decoder",
     "crates/cli",
 ]

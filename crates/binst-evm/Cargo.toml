@@ -1,0 +1,28 @@
+[package]
+name = "binst-evm"
+version = "0.1.0"
+edition = "2024"
+description = "Pure-Rust EVM ABI encoding and JSON-RPC client for BINST smart contracts"
+license = "MIT"
+
+[features]
+default = ["std"]
+std = ["ureq"]
+wasm = ["dep:wasm-bindgen", "dep:js-sys", "dep:web-sys"]
+
+[dependencies]
+hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+# std-only: synchronous HTTP for CLI
+ureq = { version = "2", features = ["json"], optional = true }
+
+# wasm-only: browser fetch (re-exported by webapp)
+wasm-bindgen = { version = "0.2", optional = true }
+js-sys = { version = "0.3", optional = true }
+web-sys = { version = "0.3", features = ["Request", "RequestInit", "Response", "Headers", "RequestMode"], optional = true }
+
+[dev-dependencies]
+hex = "0.4"
