@@ -2,15 +2,18 @@
 name = "citrea-scanner"
 version = "0.1.0"
 edition = "2024"
-description = "CLI tool to scan Bitcoin testnet4 for Citrea DA inscriptions"
+description = "BINST sovereign CLI toolkit — inscribe, deploy, execute, scan, finality"
 
 [[bin]]
-name = "citrea-scanner"
+name = "binst"
 path = "src/main.rs"
 
 [dependencies]
-citrea-decoder = { path = "../citrea-decoder" }
+binst-btc = { path = "../binst-btc", features = ["std"] }
 binst-decoder = { path = "../binst-decoder" }
+binst-evm = { path = "../binst-evm", features = ["std"] }
+binst-inscription = { path = "../binst-inscription" }
+citrea-decoder = { path = "../citrea-decoder" }
 bitcoin = "0.32"
 bitcoincore-rpc = "0.19"
 clap = { version = "4", features = ["derive"] }

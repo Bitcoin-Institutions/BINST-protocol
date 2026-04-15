@@ -354,7 +354,10 @@ dependencies = [
 name = "citrea-scanner"
 version = "0.1.0"
 dependencies = [
+ "binst-btc",
  "binst-decoder",
+ "binst-evm",
+ "binst-inscription",
  "bitcoin",
  "bitcoincore-rpc",
  "citrea-decoder",

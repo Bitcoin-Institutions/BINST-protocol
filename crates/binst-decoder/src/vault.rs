@@ -4,13 +4,27 @@
 //! [BIP 379](https://github.com/bitcoin/bips/blob/master/bip-0379.md)
 //! miniscript.
 //!
-//! The standard BINST vault has two spending paths:
+//! The standard BINST vault has **two** spending paths:
 //!
 //! 1. **Admin (CSV-delayed)** — `and(pk(admin), older(csv_delay))`
-//! 2. **Committee (immediate)** — `multi_a(2, A, B, C)`
+//!    Safe transfer after a relative time-lock (~1 day at default).
+//! 2. **Committee (immediate)** — `thresh(2, pk(A), pk(B), pk(C))`
+//!    Emergency 2-of-3 recovery path, usable at any time.
 //!
 //! Both live in Taproot script leaves; the internal key is a provably
 //! unspendable NUMS point so funds can *only* be spent via script-path.
+//!
+//! ## Vault vs. inscription sat — discoverability
+//!
+//! The vault address is written into the institution's inscription JSON body
+//! (`"vault": "tb1p…"`) as a protocol-layer custody declaration.  The
+//! inscription sat itself always stays at the wallet's plain P2TR address
+//! (`change_address`) so Ordinals indexers can discover it by wallet address.
+//!
+//! Parent-UTXO chaining (child reveal spends parent sat as input 1) works
+//! because the parent sat lives at the wallet's key-path address, which the
+//! wallet can sign immediately without any CSV delay.  The vault is for
+//! *operational value*, not for the inscription sat.
 
 use std::fmt;
 use std::str::FromStr;
@@ -119,8 +133,14 @@ impl VaultPolicy {
         let nums = XOnlyPublicKey::from_str(NUMS_KEY_HEX)
             .map_err(|e| VaultError::NumsKeyParse(e.to_string()))?;
 
-        // Build the policy string:
-        //   or(and(pk(<admin>),older(<csv>)),thresh(2,pk(A),pk(B),pk(C)))
+        // Build the 2-leaf policy string:
+        //   or(and(pk(<admin>), older(<csv>)),    ← leaf 0: CSV-delayed transfer
+        //      thresh(2, pk(A), pk(B), pk(C)))     ← leaf 1: committee emergency
+        //
+        // Note: miniscript rejects policies with the same key in multiple leaves
+        // ("duplicate keys"), so a third admin-only chaining leaf is not possible
+        // here.  Parent-UTXO chaining works via the wallet's plain key-path address
+        // (change_address) — no vault leaf needed for that operation.
         let policy_str = format!(
             "or(and(pk({}),older({})),thresh(2,pk({}),pk({}),pk({})))",
             self.admin,
@@ -202,6 +222,35 @@ pub fn parse_xonly(hex: &str) -> Result<XOnlyPublicKey, VaultError> {
     XOnlyPublicKey::from_str(hex).map_err(|e| VaultError::NumsKeyParse(e.to_string()))
 }
 
+/// Derive a simple single-admin vault address: `tr(NUMS, {pk(admin)})`.
+///
+/// This is the **pilot vault** — a Taproot address with:
+/// - NUMS internal key (key-path unspendable — wallet cannot sweep via coin selection)
+/// - Single Tapscript leaf `pk(admin)` (admin can spend via script-path, e.g. for chaining)
+///
+/// No committee keys required — suitable for single-operator institutions.
+/// The full `VaultPolicy` (with CSV delay + committee) is for production multi-sig custody.
+///
+/// The returned address is written into the institution inscription body as `"vault": "tb1p…"`
+/// so the protocol has an on-chain declaration of the custody address. The inscription sat
+/// itself stays at `change_address` for indexer discoverability.
+pub fn admin_vault_address(
+    admin: &XOnlyPublicKey,
+    network: Network,
+) -> Result<String, VaultError> {
+    let nums = XOnlyPublicKey::from_str(NUMS_KEY_HEX)
+        .map_err(|e| VaultError::NumsKeyParse(e.to_string()))?;
+
+    let policy_str = format!("pk({})", admin);
+    let policy = Concrete::<XOnlyPublicKey>::from_str(&policy_str)
+        .map_err(|e| VaultError::Compile(e.to_string()))?;
+    let descriptor = policy
+        .compile_tr(Some(nums))
+        .map_err(|e| VaultError::Compile(e.to_string()))?;
+
+    derive_address(&descriptor, network)
+}
+
 // ---------------------------------------------------------------------------
 // WASM exports (Step 2.2)
 // ---------------------------------------------------------------------------
@@ -210,6 +259,21 @@ pub fn parse_xonly(hex: &str) -> Result<XOnlyPublicKey, VaultError> {
 pub mod wasm {
     use super::*;
     use wasm_bindgen::prelude::*;
+
+    /// Derive the simple single-admin pilot vault address: `tr(NUMS, {pk(admin)})`.
+    ///
+    /// Returns a bech32m address string (`tb1p…` on testnet, `bc1p…` on mainnet).
+    /// This is what gets written into `InstitutionBody.vault` at inscription time.
+    #[wasm_bindgen]
+    pub fn derive_admin_vault_address(
+        admin_hex: &str,
+        testnet: bool,
+    ) -> Result<String, JsValue> {
+        let admin = parse_xonly(admin_hex).map_err(|e| JsValue::from_str(&e.to_string()))?;
+        let network = if testnet { Network::Testnet } else { Network::Bitcoin };
+        super::admin_vault_address(&admin, network)
+            .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
 
     /// Generate a BINST vault descriptor from pubkey hex strings.
     ///
@@ -309,6 +373,27 @@ mod tests {
             ],
             csv_delay: DEFAULT_CSV_DELAY,
         }
+    }
+
+    #[test]
+    fn admin_vault_address_testnet() {
+        let admin = parse_xonly(ADMIN_HEX).unwrap();
+        let addr = super::admin_vault_address(&admin, Network::Testnet).unwrap();
+        assert!(
+            addr.starts_with("tb1p"),
+            "expected tb1p…, got {addr}"
+        );
+    }
+
+    #[test]
+    fn admin_vault_address_differs_from_full_vault() {
+        let admin = parse_xonly(ADMIN_HEX).unwrap();
+        let pilot_addr = super::admin_vault_address(&admin, Network::Testnet).unwrap();
+        let full_addr = demo_policy().compile().unwrap().address_testnet;
+        assert_ne!(
+            pilot_addr, full_addr,
+            "pilot vault (no committee) should differ from full vault"
+        );
     }
 
     #[test]

@@ -51,6 +51,16 @@ pub struct InstitutionBody {
     /// Optional website URL.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub website: Option<String>,
+
+    /// Compiled miniscript vault address for this institution's admin key
+    /// (testnet4: `tb1p…`, mainnet: `bc1p…`).
+    ///
+    /// The inscription sat itself stays at the wallet's plain P2TR address so
+    /// Ordinals indexers can discover it by wallet address.  This field is the
+    /// protocol-layer anchor for the vault — written into the JSON body at
+    /// inscription time and verified by the BINST decoder off-chain.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vault: Option<String>,
 }
 
 /// A step definition within a process template inscription.
@@ -68,6 +78,12 @@ pub struct ProcessTemplateBody {
     pub v: u32,
     pub name: String,
 
+    /// Inscription ID of the parent institution (`<txid>i0`).
+    /// Layer 1 JSON reference — matches the Ordinals parent tag (tag 3) in the
+    /// envelope so decoders can link the template to its institution without
+    /// scanning the full UTXO set.
+    pub institution_id: String,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 
@@ -81,6 +97,12 @@ pub struct ProcessTemplateBody {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ProcessInstanceBody {
     pub v: u32,
+
+    /// Inscription ID of the parent process template (`<txid>i0`).
+    /// Layer 1 JSON reference — matches the Ordinals parent tag (tag 3) in the
+    /// envelope so decoders can link the instance to its template without
+    /// scanning the full UTXO set.
+    pub template_id: String,
 
     /// x-only Taproot pubkey of the instance creator.
     pub creator: String,
@@ -216,6 +238,7 @@ mod tests {
             "v": 0,
             "type": "process_template",
             "name": "KYC Onboarding",
+            "institution_id": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890i0",
             "steps": [
                 { "name": "ID Upload", "action_type": "upload" },
                 { "name": "Verification", "action_type": "verification" },
@@ -227,6 +250,7 @@ mod tests {
         match entity {
             BinstEntity::ProcessTemplate(tmpl) => {
                 assert_eq!(tmpl.name, "KYC Onboarding");
+                assert_eq!(tmpl.institution_id, "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890i0");
                 assert_eq!(tmpl.steps.len(), 3);
                 assert_eq!(tmpl.steps[0].action_type.as_deref(), Some("upload"));
             }
@@ -253,6 +277,25 @@ mod tests {
                 assert!(step.data_hash.is_some());
             }
             _ => panic!("Expected StepExecution"),
+        }
+    }
+
+    #[test]
+    fn parse_process_instance() {
+        let json = r#"{
+            "v": 0,
+            "type": "process_instance",
+            "template_id": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890i0",
+            "creator": "b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2"
+        }"#;
+
+        let entity = parse_binst_body(json).unwrap();
+        match entity {
+            BinstEntity::ProcessInstance(inst) => {
+                assert_eq!(inst.template_id, "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890i0");
+                assert_eq!(inst.creator, "b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2");
+            }
+            _ => panic!("Expected ProcessInstance"),
         }
     }
 

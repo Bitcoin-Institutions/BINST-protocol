@@ -93,7 +93,7 @@
 
     "process_template": {
       "type": "object",
-      "required": ["v", "type", "name", "steps"],
+      "required": ["v", "type", "name", "institution_id", "steps"],
       "description": "Parent inscription MUST be an institution inscription.",
       "properties": {
         "v": { "const": 0 },
@@ -103,6 +103,11 @@
           "minLength": 1,
           "maxLength": 256,
           "description": "Process template name."
+        },
+        "institution_id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{64}i[0-9]+$",
+          "description": "Ordinals inscription ID of the parent institution (`<txid>i<vout>`). Must match the Ordinals parent tag (tag 3) in the envelope."
         },
         "description": {
           "type": "string",
@@ -136,11 +141,16 @@
 
     "process_instance": {
       "type": "object",
-      "required": ["v", "type", "creator"],
+      "required": ["v", "type", "template_id", "creator"],
       "description": "Parent inscription MUST be a process_template inscription.",
       "properties": {
         "v": { "const": 0 },
         "type": { "const": "process_instance" },
+        "template_id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{64}i[0-9]+$",
+          "description": "Ordinals inscription ID of the parent process template (`<txid>i<vout>`). Must match the Ordinals parent tag (tag 3) in the envelope."
+        },
         "creator": {
           "$ref": "#/$defs/hex_pubkey",
           "description": "x-only Taproot pubkey of the instance creator."

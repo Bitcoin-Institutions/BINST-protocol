@@ -2,6 +2,7 @@
   "v": 0,
   "type": "process_template",
   "name": "KYC Onboarding",
+  "institution_id": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890i0",
   "description": "Know Your Customer verification workflow.",
   "citrea_contract": "0xabcdef1234567890abcdef1234567890abcdef12",
   "steps": [
