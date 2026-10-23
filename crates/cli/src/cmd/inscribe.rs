@@ -13,7 +13,7 @@ use bitcoin::key::TapTweak;
 use bitcoin::secp256k1::{self, Message, Secp256k1};
 use bitcoin::sighash::{Prevouts, SighashCache};
 use bitcoin::taproot::{self, LeafVersion, TaprootSpendInfo};
-use bitcoin::{Address, Network, ScriptBuf, TapSighashType, TxOut, Witness};
+use bitcoin::{Address, Network, NetworkKind, ScriptBuf, TapSighashType, TxOut, Witness};
 use clap::Args;
 use std::str::FromStr;
 
@@ -32,10 +32,11 @@ pub struct InscribeArgs {
     pub fee_rate: u64,
 
     /// Parent inscription ID for provenance linking (e.g. "abcdef...i0").
+    /// Not supported yet: the command fails if this is set (see `run`).
     #[arg(long)]
     pub parent: Option<String>,
 
-    /// Bitcoin network.
+    /// Bitcoin network: testnet4 or signet.
     #[arg(long, default_value = "testnet4")]
     pub network: String,
 
@@ -48,13 +49,21 @@ pub fn run(args: &InscribeArgs) -> Result<(), Box<dyn std::error::Error>> {
     let secp = Secp256k1::new();
 
     // ── Parse network ────────────────────────────────────────────
-    let btc_network = match args.network.as_str() {
-        "testnet4" => BtcNetwork::Testnet4,
-        "signet" => BtcNetwork::Signet,
-        "mainnet" | "bitcoin" => BtcNetwork::Mainnet,
-        other => return Err(format!("Unknown network: {other}").into()),
-    };
+    let btc_network = parse_network(&args.network)?;
     let network = btc_network.to_bitcoin_network();
+
+    // ── Parent provenance (not supported yet) ────────────────────
+    // ord only links a child to its parent when the reveal spends the
+    // parent's sat. Without that input the parent tag alone would produce
+    // a child that ord never recognizes, so refuse instead.
+    if let Some(parent) = &args.parent {
+        return Err(format!(
+            "--parent {parent}: child inscriptions are not supported by the CLI yet \
+             (the reveal must spend the parent inscription's UTXO). \
+             Inscribe children from the webapp, or omit --parent."
+        )
+        .into());
+    }
 
     // ── Parse private key ────────────────────────────────────────
     let keypair = parse_private_key(&args.private_key, network, &secp)?;
@@ -104,8 +113,8 @@ pub fn run(args: &InscribeArgs) -> Result<(), Box<dyn std::error::Error>> {
         fee_rate,
         &address,
         network,
-        args.parent.as_deref(),
-        None, // TODO: parent UTXO fetch for child inscriptions
+        None, // --parent is rejected above until parent UTXO spending lands
+        None,
     )?;
 
     eprintln!(
@@ -140,15 +149,40 @@ pub fn run(args: &InscribeArgs) -> Result<(), Box<dyn std::error::Error>> {
         &secp,
     )?;
 
+    // ── Save signed txs before broadcasting ──────────────────────
+    // Once the commit is out, its funds can only be recovered with this
+    // exact reveal (the commit pays to tr(NUMS, {leaf})). Signed txs hold
+    // no key material, so keep both on disk in case the reveal fails.
+    let commit_hex = bitcoin::consensus::encode::serialize_hex(&signed_commit);
+    let reveal_hex = bitcoin::consensus::encode::serialize_hex(&signed_reveal);
+    let saved = std::env::temp_dir().join(format!(
+        "binst-inscribe-{}.json",
+        signed_commit.compute_txid()
+    ));
+    let saved_body = serde_json::json!({
+        "network": args.network,
+        "commit_txid": signed_commit.compute_txid().to_string(),
+        "commit_hex": commit_hex,
+        "reveal_txid": signed_reveal.compute_txid().to_string(),
+        "reveal_hex": reveal_hex,
+    });
+    std::fs::write(&saved, serde_json::to_string_pretty(&saved_body)?)
+        .map_err(|e| format!("Save signed txs to {}: {e}", saved.display()))?;
+    eprintln!("Signed commit and reveal saved to {}", saved.display());
+
     // ── Broadcast ────────────────────────────────────────────────
     eprintln!("Broadcasting commit tx...");
-    let commit_hex = bitcoin::consensus::encode::serialize_hex(&signed_commit);
     let commit_txid = mempool.broadcast(&commit_hex)?;
     eprintln!("Commit txid: {commit_txid}");
 
     eprintln!("Broadcasting reveal tx...");
-    let reveal_hex = bitcoin::consensus::encode::serialize_hex(&signed_reveal);
-    let reveal_txid = mempool.broadcast(&reveal_hex)?;
+    let reveal_txid = mempool.broadcast(&reveal_hex).map_err(|e| {
+        format!(
+            "Commit {commit_txid} was broadcast but the reveal failed: {e}. \
+             The signed reveal is in {} (reveal_hex); rebroadcast it once the commit is in the mempool.",
+            saved.display()
+        )
+    })?;
     let inscription_id = format!("{reveal_txid}i0");
 
     // ── Output ───────────────────────────────────────────────────
@@ -174,14 +208,34 @@ pub fn run(args: &InscribeArgs) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Parse the `--network` value. Test networks only: this command signs and
+/// broadcasts, and BINST is a testnet pilot.
+fn parse_network(name: &str) -> Result<BtcNetwork, String> {
+    match name {
+        "testnet4" => Ok(BtcNetwork::Testnet4),
+        "signet" => Ok(BtcNetwork::Signet),
+        "mainnet" | "bitcoin" => Err(format!(
+            "Network {name} is not supported: `binst inscribe` only runs on testnet4 or signet."
+        )),
+        other => Err(format!("Unknown network: {other} (use testnet4 or signet)")),
+    }
+}
+
 /// Parse a private key from WIF or hex format.
 fn parse_private_key(
     input: &str,
-    _network: Network,
+    network: Network,
     secp: &Secp256k1<secp256k1::All>,
 ) -> Result<Keypair, Box<dyn std::error::Error>> {
-    // Try WIF first
+    // Try WIF first; its version byte must match the requested network.
     if let Ok(privkey) = bitcoin::PrivateKey::from_str(input) {
+        if privkey.network != NetworkKind::from(network) {
+            return Err(format!(
+                "WIF key is for {:?} but --network is {network}. Use a test-network key.",
+                privkey.network
+            )
+            .into());
+        }
         return Ok(Keypair::from_secret_key(secp, &privkey.inner));
     }
     // Try raw hex (32 bytes = 64 hex chars)
@@ -303,5 +357,48 @@ fn entity_type(entity: &BinstEntity) -> &str {
         BinstEntity::ProcessInstance(_) => "process_instance",
         BinstEntity::StepExecution(_) => "step_execution",
         BinstEntity::StateDigest(_) => "state_digest",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn wif(kind: NetworkKind) -> String {
+        let secret = secp256k1::SecretKey::from_slice(&[0x01; 32]).unwrap();
+        bitcoin::PrivateKey::new(secret, kind).to_wif()
+    }
+
+    fn args(network: &str, parent: Option<&str>) -> InscribeArgs {
+        InscribeArgs {
+            file: "/nonexistent.json".into(),
+            private_key: wif(NetworkKind::Test),
+            fee_rate: 1,
+            parent: parent.map(String::from),
+            network: network.into(),
+            format: "text".into(),
+        }
+    }
+
+    #[test]
+    fn rejects_mainnet() {
+        assert!(parse_network("mainnet").is_err());
+        assert!(parse_network("bitcoin").is_err());
+        assert!(parse_network("testnet4").is_ok());
+        assert!(parse_network("signet").is_ok());
+    }
+
+    #[test]
+    fn wif_must_match_network() {
+        let secp = Secp256k1::new();
+        assert!(parse_private_key(&wif(NetworkKind::Test), Network::Testnet4, &secp).is_ok());
+        let err = parse_private_key(&wif(NetworkKind::Main), Network::Testnet4, &secp).unwrap_err();
+        assert!(err.to_string().contains("--network"));
+    }
+
+    #[test]
+    fn parent_is_rejected_before_any_network_call() {
+        let err = run(&args("testnet4", Some("abc…i0"))).unwrap_err();
+        assert!(err.to_string().contains("not supported"));
     }
 }

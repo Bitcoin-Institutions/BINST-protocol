@@ -60,9 +60,43 @@ binst factory --template "abc123...i0"
 
 # Scan Bitcoin blocks for Citrea DA inscriptions
 binst scan --citrea-rpc https://rpc.testnet.citrea.xyz --block 127747
+
+# Inscribe a BINST entity on testnet4 (no local node; mempool.space API)
+binst inscribe --file institution.json --private-key <testnet4 WIF or hex> --network testnet4
 ```
 
 All subcommands support `--format json` for scripting.
+
+### `binst inscribe`
+
+Builds the commit and reveal transactions, signs them locally, and broadcasts both
+through the mempool.space API. Before broadcasting, it saves both signed transactions
+to `binst-inscribe-<commit txid>.json` in the system temp directory, so a failed
+reveal can be rebroadcast.
+
+Current limits:
+
+- **Test networks only** (`testnet4`, `signet`). A WIF key must match the network.
+- **No child inscriptions yet.** `--parent` is rejected: ord only links a child
+  when the reveal spends the parent's sat, and the CLI does not do that yet.
+  Inscribe children from the webapp.
+- The private key is passed as an argument, so it is visible in `ps` while the
+  command runs. Use a throwaway testnet key.
+
+## End-to-end demo (`demo.sh`)
+
+`./demo.sh` is an interactive wizard that inscribes an Institution and a
+ProcessTemplate on testnet4 with `binst inscribe`, then creates and executes a
+process instance on Citrea testnet through `BINSTProcessFactory` with `cast`.
+It asks for the keys at a hidden prompt, keeps its files in a temporary
+directory that it deletes on exit, and can skip L1 and run in L2-only mode.
+
+The template is linked to the institution only by the `institution_id` field in
+its body: there is no ord parent-child link, because the CLI cannot spend the
+parent's sat yet.
+
+Requires `cargo`, `curl`, `jq`, `python3` and Foundry's `cast`, plus a funded testnet4 key and a
+Citrea testnet key.
 
 ## Metaprotocol
 
@@ -126,7 +160,7 @@ The `binst finality` command and `binst-evm::FinalityTier` classify any L2 block
 ## Testing
 
 ```bash
-# Run all 106 tests
+# Run all 109 tests
 cargo test --workspace
 
 # Run live Citrea testnet tests (requires network)
@@ -143,8 +177,8 @@ cargo test -p binst-evm
 | `binst-evm` | 18 + 4 live (ignored) |
 | `binst-inscription` | 11 |
 | `citrea-decoder` | 7 |
-| `cli` | 5 |
-| **Total** | **106 passing** |
+| `cli` | 8 |
+| **Total** | **109 passing** |
 
 ## Project Structure
 

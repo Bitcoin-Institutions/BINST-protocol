@@ -193,14 +193,14 @@ INST_JSON
       --file "$DEMO_DIR/institution.json" \
       --private-key "$BTC_PRIVATE_KEY" \
       --network testnet4 \
-      --format json 2>/dev/null) || true
+      --format json 2>"$DEMO_DIR/inscribe-institution.log") || true
 
     INSTITUTION_ID=$(echo "$INST_RESULT" | jq -r '.inscription_id // empty' 2>/dev/null)
     INST_REVEAL=$(echo "$INST_RESULT" | jq -r '.reveal_txid // empty' 2>/dev/null)
 
     if [[ -z "$INSTITUTION_ID" ]]; then
       warn "Institution inscription failed. Output:"
-      echo "  $INST_RESULT"
+      sed 's/^/  /' "$DEMO_DIR/inscribe-institution.log"
       warn "Falling back to L2-only mode."
       L2_ONLY=true
     else
@@ -236,25 +236,27 @@ TMPL_JSON
       ok "Template body written"
       jq . "$DEMO_DIR/template.json"
 
-      step "Inscribing process template with parent provenance..."
+      # The CLI cannot spend the parent's sat yet, so this template is linked
+      # to the institution only by `institution_id` in its body, not by ord
+      # parent-child provenance. The webapp inscribes real children.
+      step "Inscribing process template (linked by institution_id)..."
       TMPL_RESULT=$(cargo run --bin binst -q -- inscribe \
         --file "$DEMO_DIR/template.json" \
         --private-key "$BTC_PRIVATE_KEY" \
-        --parent "$INSTITUTION_ID" \
         --network testnet4 \
-        --format json 2>/dev/null) || true
+        --format json 2>"$DEMO_DIR/inscribe-template.log") || true
 
       TEMPLATE_ID=$(echo "$TMPL_RESULT" | jq -r '.inscription_id // empty' 2>/dev/null)
       TMPL_REVEAL=$(echo "$TMPL_RESULT" | jq -r '.reveal_txid // empty' 2>/dev/null)
 
       if [[ -z "$TEMPLATE_ID" ]]; then
         warn "Template inscription failed. Output:"
-        echo "  $TMPL_RESULT"
+        sed 's/^/  /' "$DEMO_DIR/inscribe-template.log"
         warn "Falling back to L2-only mode with institution only."
       else
         ok "ProcessTemplate inscribed!"
         ok "  Inscription ID: $TEMPLATE_ID"
-        ok "  Parent:          $INSTITUTION_ID"
+        ok "  institution_id: $INSTITUTION_ID (body field; no ord parent-child link)"
         ok "  Reveal tx:       $TMPL_REVEAL"
       fi
     fi
