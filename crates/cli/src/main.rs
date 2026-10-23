@@ -28,6 +28,8 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
+    /// Inscribe a BINST entity on Bitcoin (no local node needed).
+    Inscribe(cmd::inscribe::InscribeArgs),
     /// Scan Bitcoin testnet4 for Citrea DA inscriptions.
     Scan(cmd::scan::ScanArgs),
     /// Query Bitcoin settlement finality of Citrea L2 blocks.
@@ -43,6 +45,7 @@ enum Commands {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
     match cli.command {
+        Commands::Inscribe(ref args) => cmd::inscribe::run(args),
         Commands::Scan(ref args) => cmd::scan::run(args),
         Commands::Finality(ref args) => cmd::finality::run(args),
         Commands::Factory(ref args) => cmd::factory::run(args),
